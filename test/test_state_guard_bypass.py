@@ -178,3 +178,17 @@ def test_runtime_verification_supports_target_local_imports_and_restores_sys_pat
 
     assert any(f.target == "session.Session.status" for f in findings)
     assert project_str not in sys.path
+
+
+def test_constructor_validation_is_not_treated_as_state_guard(tmp_path):
+    project = make_project(
+        tmp_path,
+        "reservation.py",
+        "class Reservation:\n"
+        "    def __init__(self, nights: int):\n"
+        "        if self.nights < 1:\n"
+        "            raise ValueError('nights must be positive')\n"
+        "        self.nights = nights\n",
+    )
+
+    assert run_probe(project) == []

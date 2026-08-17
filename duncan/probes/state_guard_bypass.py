@@ -24,6 +24,8 @@ def _call_name(node: ast.Call) -> str:
 def _guarded_attributes(cls: ast.ClassDef) -> set[str]:
     found: set[str] = set()
     for method in (n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))):
+        if method.name in {"__init__", "__post_init__"}:
+            continue
         for condition in (n.test for n in ast.walk(method) if isinstance(n, (ast.If, ast.While))):
             if not any(isinstance(n, ast.Raise) for n in ast.walk(method)):
                 continue
