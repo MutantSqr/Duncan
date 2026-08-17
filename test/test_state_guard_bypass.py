@@ -192,3 +192,22 @@ def test_constructor_validation_is_not_treated_as_state_guard(tmp_path):
     )
 
     assert run_probe(project) == []
+
+
+def test_read_only_decision_input_next_to_guarded_state_is_ignored(tmp_path):
+    project = make_project(
+        tmp_path,
+        "kernel.py",
+        "class Kernel:\n"
+        "    def __init__(self):\n"
+        "        self.personality = 'careful'\n"
+        "        self.plan_open = True\n"
+        "    def finish(self):\n"
+        "        if self.personality == 'careful' and self.plan_open:\n"
+        "            raise ValueError('plan is still open')\n"
+        "        self.plan_open = False\n",
+    )
+
+    findings = run_probe(project)
+
+    assert [finding.target for finding in findings] == ["kernel.Kernel.plan_open"]

@@ -21,8 +21,30 @@ def _call_name(node: ast.Call) -> str:
     return func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else ""
 
 
+def _mutated_outside_constructor(cls: ast.ClassDef) -> set[str]:
+    """Return attributes assigned through ``self.X`` after construction.
+
+    This distinguishes guarded state fields from read-only decision inputs that
+    merely appear in the same raising condition as a genuinely guarded field.
+    """
+    mutated: set[str] = set()
+    for method in (n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))):
+        if method.name in {"__init__", "__post_init__"}:
+            continue
+        for node in ast.walk(method):
+            targets: list[ast.expr] = []
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+                targets = [node.target]
+            for target in targets:
+                if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) and target.value.id == "self":
+                    mutated.add(target.attr)
+    return mutated
+
+
 def _guarded_attributes(cls: ast.ClassDef) -> set[str]:
-    found: set[str] = set()
+    candidates: set[str] = set()
     for method in (n for n in cls.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))):
         if method.name in {"__init__", "__post_init__"}:
             continue
@@ -31,8 +53,11 @@ def _guarded_attributes(cls: ast.ClassDef) -> set[str]:
                 continue
             for node in ast.walk(condition):
                 if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "self":
-                    found.add(node.attr)
-    return found
+                    candidates.add(node.attr)
+    # A candidate only counts as a real guarded-state field if it's also
+    # written somewhere after construction. Otherwise it's a read-only
+    # decision input that happened to sit near someone else's guard.
+    return candidates & _mutated_outside_constructor(cls)
 
 
 def _has_protection(cls: ast.ClassDef, name: str) -> bool:
