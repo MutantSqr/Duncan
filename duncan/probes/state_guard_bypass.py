@@ -70,13 +70,25 @@ def _construct(cls: type) -> Any:
 def _load(path: Path, root: Path) -> ModuleType:
     relative = path.relative_to(root).with_suffix("")
     name = "duncan_target_" + "_".join(relative.parts)
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"cannot load {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
+    root_str = str(root)
+    added_root = False
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+        added_root = True
+    try:
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"cannot load {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if added_root:
+            try:
+                sys.path.remove(root_str)
+            except ValueError:
+                pass
 
 
 class StateGuardBypassProbe(Probe):

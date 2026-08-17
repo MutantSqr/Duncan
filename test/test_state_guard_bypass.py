@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from duncan.findings import Severity
@@ -152,3 +153,28 @@ def test_empty_project_yields_no_findings(tmp_path):
     findings = run_probe(project)
 
     assert findings == []
+
+
+def test_runtime_verification_supports_target_local_imports_and_restores_sys_path(tmp_path):
+    project = tmp_path / "target"
+    project.mkdir()
+    (project / "statuses.py").write_text(
+        'from enum import Enum\nclass Status(str, Enum):\n    OPEN = "open"\n    CLOSED = "closed"\n'
+    )
+    (project / "session.py").write_text(
+        "from statuses import Status\n\n"
+        "class Session:\n"
+        "    def __init__(self):\n"
+        "        self.status = Status.OPEN\n"
+        "    def close(self):\n"
+        "        if self.status != Status.OPEN:\n"
+        "            raise ValueError('already closed')\n"
+        "        self.status = Status.CLOSED\n"
+    )
+
+    project_str = str(project)
+    assert project_str not in sys.path
+    findings = run_probe(project)
+
+    assert any(f.target == "session.Session.status" for f in findings)
+    assert project_str not in sys.path
