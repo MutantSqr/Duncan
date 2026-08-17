@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "duncan-test-ai"
+version = "0.2.0"
+description = "A safe, adversarial Python test runner with optional AI analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pytest>=7,<9"]
+
+[project.optional-dependencies]
+ai = ["openai>=1.40"]
+dev = ["pytest>=7,<9"]
+
+[project.scripts]
+duncan = "duncan.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["duncan*"]

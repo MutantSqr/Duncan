@@ -17,13 +17,39 @@ fixtures.
 ## Usage
 
 ```bash
-pip install -r requirements.txt
-python -m duncan /path/to/some/project
+python -m pip install -e .
+duncan /path/to/some/project
 ```
 
-Writes `duncan_report_<project>.md` and prints it to stdout. Every probe run
+For optional AI-assisted diagnosis:
+
+```bash
+python -m pip install -e '.[ai]'
+export OPENAI_API_KEY='...'
+duncan /path/to/some/project --ai
+```
+
+AI is opt-in. Normal test execution and adversarial probes work without an API
+key. `DUNCAN_AI_MODEL` or `--ai-model` selects the model.
+
+Writes `duncan_report_<project>.md` plus a machine-readable JSON report and
+prints Markdown to stdout. Reports include the test command, duration, exit
+code, stdout, stderr, probe findings, and optional AI analysis. Duncan returns
+the target pytest exit code when the baseline fails.
+
+Every probe run
 happens against a throwaway copy of the target (`duncan/sandbox.py`) — the
 original is never touched.
+
+> **Trust boundary:** the throwaway copy protects the original working tree; it
+> is not an operating-system security boundary. Only run trusted code locally.
+> Run untrusted targets inside a locked-down disposable container or worker.
+
+## Supported targets
+
+Duncan currently accepts a local Python project and runs its pytest suite with
+the same Python interpreter that runs Duncan. Clone remote repositories and
+install their dependencies into an isolated environment before invoking it.
 
 ## What it currently checks: guard-ordering bypass
 

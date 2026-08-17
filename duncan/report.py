@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import List
+import json
+from typing import List, Optional
 
 from duncan.findings import Finding, Severity
+from duncan.ai import AIAnalysis
 from duncan.runner import BaselineResult
 
 _ORDER = [Severity.CONFIRMED, Severity.SUSPECTED, Severity.INFO]
@@ -23,11 +25,14 @@ def _fence_if_multiline(value: str) -> str:
     return value
 
 
-def render_markdown(project_name: str, baseline: BaselineResult, findings: List[Finding]) -> str:
+def render_markdown(project_name: str, baseline: BaselineResult, findings: List[Finding], ai: Optional[AIAnalysis] = None) -> str:
     lines = [f"# Duncan report — {project_name}", ""]
 
     lines.append("## Baseline test suite")
     lines.append(f"- Result: **{'PASS' if baseline.passed else 'FAIL'}**")
+    lines.append(f"- Exit code: `{baseline.returncode}`")
+    lines.append(f"- Duration: `{baseline.duration_seconds:.3f}s`")
+    lines.append(f"- Command: `{' '.join(baseline.command)}`")
     # Show the pytest summary in inline code, but if it's multi-line, render as a code block.
     summary = baseline.summary or ""
     if "\n" in summary:
@@ -38,6 +43,10 @@ def render_markdown(project_name: str, baseline: BaselineResult, findings: List[
     else:
         lines.append(f"- pytest summary: `{summary}`")
     lines.append("")
+    if baseline.stdout:
+        lines.extend(["### pytest stdout", "```text", baseline.stdout.rstrip(), "```", ""])
+    if baseline.stderr:
+        lines.extend(["### pytest stderr", "```text", baseline.stderr.rstrip(), "```", ""])
 
     by_severity = {sev: [f for f in findings if f.severity == sev] for sev in _ORDER}
     # Sort findings within each severity for deterministic output
@@ -50,6 +59,8 @@ def render_markdown(project_name: str, baseline: BaselineResult, findings: List[
 
     if not findings:
         lines.append("No issues found by the current probe set.")
+        if ai:
+            lines.extend(["", "## AI analysis", f"- Status: `{ai.status}`", "", ai.text])
         return "\n".join(lines)
 
     for sev in _ORDER:
@@ -83,4 +94,21 @@ def render_markdown(project_name: str, baseline: BaselineResult, findings: List[
                     lines.append(f"  - Suggested fix: {f.suggested_fix}")
         lines.append("")
 
+    if ai:
+        lines.extend(["## AI analysis", f"- Status: `{ai.status}`", f"- Model: `{ai.model or 'none'}`", "", ai.text, ""])
     return "\n".join(lines)
+
+
+def render_json(project_name: str, baseline: BaselineResult, findings: List[Finding], ai: Optional[AIAnalysis] = None) -> str:
+    payload = {
+        "schema_version": 1,
+        "project": project_name,
+        "baseline": {
+            "passed": baseline.passed, "returncode": baseline.returncode, "summary": baseline.summary,
+            "stdout": baseline.stdout, "stderr": baseline.stderr, "command": baseline.command,
+            "duration_seconds": baseline.duration_seconds, "timed_out": baseline.timed_out,
+        },
+        "findings": [finding.to_dict() for finding in findings],
+        "ai": None if ai is None else {"status": ai.status, "text": ai.text, "model": ai.model},
+    }
+    return json.dumps(payload, indent=2, sort_keys=True)

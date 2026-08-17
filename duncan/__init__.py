@@ -5,4 +5,4 @@ that go looking for guardrails a project *thinks* it has but doesn't actually
 enforce, and verify the bypass at runtime instead of just flagging a pattern.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

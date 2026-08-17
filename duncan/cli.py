@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import List, Optional
 
 from duncan.probes.state_guard_bypass import StateGuardBypassProbe
-from duncan.report import render_markdown
+from duncan.ai import analyze_with_openai
+from duncan.report import render_json, render_markdown
 from duncan.runner import run_baseline_tests
-from duncan.sandbox import Sandbox, make_sandbox
+from duncan.sandbox import Sandbox
 
 _log = logging.getLogger(__name__)
 
@@ -28,6 +29,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument("project", type=Path, help="Path to the project to test")
     parser.add_argument("--out", type=Path, default=None, help="Where to write the markdown report")
+    parser.add_argument("--json-out", type=Path, default=None, help="Where to write the JSON report")
+    parser.add_argument("--ai", action="store_true", help="Analyze results with OpenAI (requires OPENAI_API_KEY and the ai extra)")
+    parser.add_argument("--ai-model", default=None, help="OpenAI model used with --ai")
     parser.add_argument("--list-probes", action="store_true", help="List available probes and exit")
     parser.add_argument("--probe", action="append", help="Run only the named probe (may be given multiple times)")
     parser.add_argument("--pytest-arg", action="append", dest="pytest_args", help="Extra argument passed to pytest (can be given multiple times)")
@@ -67,22 +71,28 @@ def main(argv: Optional[List[str]] = None) -> int:
             baseline = run_baseline_tests(sandbox_root, pytest_args=args.pytest_args)
 
             findings = []
+            probe_errors = []
             for cls in selected:
                 probe_name = _probe_name(cls)
                 _log.info("running probe %s", probe_name)
                 probe = cls()
                 try:
                     probe_findings = probe.run(sandbox_root)
-                except Exception:
+                except Exception as exc:
                     _log.exception("probe %s raised an exception; continuing with others", probe_name)
+                    probe_errors.append(f"{probe_name}: {type(exc).__name__}: {exc}")
                     continue
                 if probe_findings:
                     findings.extend(probe_findings)
 
-            report = render_markdown(source_root.name, baseline, findings)
+            context = "\n".join([baseline.summary, baseline.stdout, baseline.stderr] + [str(f.to_dict()) for f in findings] + probe_errors)
+            ai = analyze_with_openai(context, args.ai_model) if args.ai else None
+            report = render_markdown(source_root.name, baseline, findings, ai)
             out_path = args.out or (Path.cwd() / f"duncan_report_{source_root.name}.md")
+            json_path = args.json_out or out_path.with_suffix(".json")
             try:
                 out_path.write_text(report, encoding="utf-8")
+                json_path.write_text(render_json(source_root.name, baseline, findings, ai), encoding="utf-8")
             except Exception:
                 _log.exception("failed to write report to %s", out_path)
                 print(report)
@@ -90,8 +100,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 return 4
 
             print(report)
-            print(f"\nReport written to {out_path}")
-            return 0
+            print(f"\nReports written to {out_path} and {json_path}")
+            if probe_errors:
+                return 6
+            return 0 if baseline.passed else baseline.returncode or 1
     except Exception:
         _log.exception("error while preparing or running the sandbox")
         return 5
