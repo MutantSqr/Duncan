@@ -16,9 +16,9 @@ def _skip(path: Path, root: Path) -> bool:
 
 
 def _aliases(tree: ast.AST) -> tuple[set[str], set[str], set[str]]:
-    """Return subprocess module aliases, os aliases, and directly imported subprocess call names."""
-    subprocess_aliases = {"subprocess"}
-    os_aliases = {"os"}
+    """Return imported subprocess aliases, os aliases, and direct subprocess-call aliases."""
+    subprocess_aliases: set[str] = set()
+    os_aliases: set[str] = set()
     subprocess_functions: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
