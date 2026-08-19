@@ -52,6 +52,21 @@ def test_shell_false_or_omitted_is_not_flagged(tmp_path) -> None:
     assert findings == []
 
 
+def test_names_that_resemble_modules_are_not_flagged_without_imports(tmp_path) -> None:
+    findings = _scan(
+        tmp_path,
+        "class Fake:\n"
+        "    def run(self, *args, **kwargs): return None\n"
+        "    def system(self, *args, **kwargs): return None\n"
+        "subprocess = Fake()\n"
+        "os = Fake()\n"
+        "subprocess.run('echo hi', shell=True)\n"
+        "os.system('echo hi')\n",
+    )
+
+    assert findings == []
+
+
 def test_os_system_and_popen_are_confirmed(tmp_path) -> None:
     findings = _scan(
         tmp_path,
