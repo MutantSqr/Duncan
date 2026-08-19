@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
+from duncan.probes.dangerous_execution import DangerousExecutionProbe
 from duncan.probes.state_guard_bypass import StateGuardBypassProbe
 from duncan.ai import analyze_with_openai
 from duncan.report import render_json, render_markdown
@@ -16,7 +17,7 @@ _log = logging.getLogger(__name__)
 
 # Keep probe classes here (not instances) so we instantiate at runtime and avoid
 # side effects on import.
-PROBE_CLASSES = [StateGuardBypassProbe]
+PROBE_CLASSES = [StateGuardBypassProbe, DangerousExecutionProbe]
 
 
 def _probe_name(cls) -> str:
@@ -39,7 +40,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
     args = parser.parse_args(argv)
 
-    # Configure logging
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s: %(message)s")
 
     source_root = args.project.resolve()
@@ -52,19 +52,17 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(_probe_name(cls))
         return 0
 
-    # Determine probe classes to run
     selected = None
     if args.probe:
         requested = {name.lower() for name in args.probe}
         selected = [cls for cls in PROBE_CLASSES if _probe_name(cls).lower() in requested]
-        missing = [name for name in args.probe if name.lower() not in { _probe_name(cls).lower() for cls in PROBE_CLASSES }]
+        missing = [name for name in args.probe if name.lower() not in {_probe_name(cls).lower() for cls in PROBE_CLASSES}]
         if missing:
             print(f"error: unknown probes: {', '.join(missing)}", file=sys.stderr)
             return 3
     else:
         selected = PROBE_CLASSES
 
-    # Use the Sandbox context manager so we clean up automatically unless the user asks to keep it.
     try:
         with Sandbox(source_root, keep=args.keep_sandbox) as sandbox_root:
             _log.info("running baseline tests in sandbox %s", sandbox_root)
